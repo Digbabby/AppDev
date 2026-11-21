@@ -20,6 +20,8 @@ else:
     BASE_DIR = os.path.dirname(SCRIPT_DIR)
 
 VOICE_LOOP_ACTIVE = False
+VOICE_LOCKED = False          # True = the voice engine ignores everything except the unlock phrase
+_lock_gui_ref = None          # dashboard handle used by the hotkey (it has no gui_ref of its own)
 sample_rate = 16000
 audio_queue = queue.Queue()
 voice_lock = threading.Lock()
@@ -45,6 +47,93 @@ def preload_model():
         print("[WHISPER] Model preloaded.")
     except Exception as e:
         print(f"[WHISPER] Preload failed (it will be retried on START): {e}")
+
+# ---------------------------------------------------------------------------
+# VOICE LOCK
+# While locked the microphone is still open (it has to hear the unlock phrase), but nothing that is said is
+# logged, shown as a subtitle or run, until you unlock again. Say "lock voice" / "unlock voice", press the
+# dashboard button, or press Ctrl+Alt+M. The phrases can be changed in voice_commands.json with the keys
+# "voice_lock_phrases" and "voice_unlock_phrases" (lists of strings).
+# ---------------------------------------------------------------------------
+DEFAULT_LOCK_PHRASES = ("lock voice", "voice lock", "lock voice commands", "stop listening")
+DEFAULT_UNLOCK_PHRASES = ("unlock voice", "voice unlock", "unlock voice commands", "start listening", "resume listening")
+
+
+def _clean_phrase(text):
+    return " ".join(re.sub(r"[^a-z0-9' ]+", " ", str(text).lower()).split())
+
+
+def _phrase_list(config_payload, key, defaults):
+    custom = config_payload.get(key)
+    items = custom if isinstance(custom, list) and custom else defaults
+    return [c for c in (_clean_phrase(p) for p in items) if c]
+
+
+def _is_exact_command(text, phrases):
+    """True when the WHOLE utterance is the phrase (optionally with 'please' / 'now'), so that dictating a
+    sentence that happens to contain 'lock voice' does not lock anything."""
+    cleaned = _clean_phrase(text)
+    cleaned = re.sub(r"^please ", "", cleaned)
+    cleaned = re.sub(r" (please|now)$", "", cleaned)
+    return cleaned in phrases
+
+
+def _contains_command(text, phrases):
+    """True when the phrase appears as whole words anywhere in the utterance (used for unlocking)."""
+    cleaned = f" {_clean_phrase(text)} "
+    return any(f" {p} " in cleaned for p in phrases)
+
+
+def _lock_phrases(config_payload):
+    """Built-in / configured lock phrases plus any phrase mapped to the 'voice_lock' action in the Voice Commands tab."""
+    base = _phrase_list(config_payload, "voice_lock_phrases", DEFAULT_LOCK_PHRASES)
+    extra = [_clean_phrase(p) for p in (config_payload.get("voice_commands", {}) or {}).get("voice_lock", [])]
+    return base + [e for e in extra if e and e not in base]
+
+
+def _unlock_phrases(config_payload):
+    """Same for unlocking ('voice_unlock' action). These are the only phrases heard while locked."""
+    base = _phrase_list(config_payload, "voice_unlock_phrases", DEFAULT_UNLOCK_PHRASES)
+    extra = [_clean_phrase(p) for p in (config_payload.get("voice_commands", {}) or {}).get("voice_unlock", [])]
+    return base + [e for e in extra if e and e not in base]
+
+
+def set_voice_locked(locked, gui_ref=None):
+    """Locks / unlocks voice commands. Safe to call from any thread."""
+    global VOICE_LOCKED
+    locked = bool(locked)
+    if VOICE_LOCKED == locked:
+        return
+    VOICE_LOCKED = locked
+    ui = gui_ref or _lock_gui_ref
+    message = ("[VOICE LOCK] Voice commands LOCKED. Say \"unlock voice\" (or press Ctrl+Alt+M) to resume."
+               if locked else "[VOICE LOCK] Voice commands UNLOCKED. Listening for commands.")
+    try:
+        if ui is not None:
+            ui.log_message(message)
+        else:
+            print(message)
+    except Exception:
+        print(message)
+    refresh = getattr(ui, "refresh_voice_lock_ui", None) if ui is not None else None
+    if refresh is not None:
+        try:
+            run_on_ui = getattr(ui, "run_on_ui", None)
+            run_on_ui(refresh) if run_on_ui is not None else refresh()
+        except Exception:
+            pass
+
+
+def _toggle_voice_lock_hotkey():
+    if VOICE_LOOP_ACTIVE:
+        set_voice_locked(not VOICE_LOCKED, _lock_gui_ref)
+
+
+try:
+    keyboard.add_hotkey('ctrl+alt+m', _toggle_voice_lock_hotkey)
+except Exception as _hk_err:
+    print(f"[VOICE LOCK] Hotkey Ctrl+Alt+M not available: {_hk_err}")
+
 
 def _dispatcher():
     """Imported on first use (action_dispatcher imports this package's modules, so a top-level import would loop)."""
@@ -171,6 +260,9 @@ def interpret_voice_intent(phrase, config_payload):
     if not phrase_lower:
         return ("Nothing heard yet", "none")
 
+    if _is_exact_command(phrase_lower, _lock_phrases(config_payload)):
+        return ("Lock voice commands (say \"unlock voice\" to resume)", "mode")
+
     if "activate writing mode" in phrase_lower or "start typing" in phrase_lower:
         return ("Enter writing mode", "mode")
     if "disable writing mode" in phrase_lower or "stop typing" in phrase_lower:
@@ -260,10 +352,14 @@ def _format_pending_preview(text, label, kind, remaining):
 
 def run_voice_loop(gui_ref=None, should_run=None):
     """Listens and runs voice commands until VOICE_LOOP_ACTIVE is cleared or should_run() returns False."""
-    global VOICE_LOOP_ACTIVE
+    global VOICE_LOOP_ACTIVE, _lock_gui_ref
     VOICE_LOOP_ACTIVE = True
+    _lock_gui_ref = gui_ref
+    set_voice_locked(False, gui_ref)      # every START begins unlocked
     should_run = should_run or (lambda: True)
     config_payload = load_voice_configurations()
+    lock_phrases = _lock_phrases(config_payload)
+    unlock_phrases = _unlock_phrases(config_payload)
 
     # Pickup range: how loud speech must be (relative to the room) to count. Louder = closer.
     # Set "mic_range" in voice_commands.json to "near", "normal" or "far".
@@ -310,6 +406,12 @@ def run_voice_loop(gui_ref=None, should_run=None):
             except Exception:
                 pass
 
+    def idle_preview():
+        if VOICE_LOCKED:
+            push_preview("🔒 Voice locked - say “unlock voice”", "#ffb300")
+        else:
+            push_preview("Voice: idle", "#6C6B80")
+
     if gui_ref:
         gui_ref.log_message("[WHISPER] Loading Thread-Locked Context Filtering Engine...")
     model = get_whisper_model()
@@ -347,8 +449,19 @@ def run_voice_loop(gui_ref=None, should_run=None):
     with sd.InputStream(samplerate=sample_rate, channels=1, callback=audio_callback):
         accumulated_blocks = []
         start_tracking_time = time.time()
+        last_lock_state = False
 
         while VOICE_LOOP_ACTIVE and should_run():
+            if VOICE_LOCKED != last_lock_state:
+                # The lock changed (spoken, button or hotkey): drop anything half-heard so it can't run later.
+                last_lock_state = VOICE_LOCKED
+                pending_text = ""
+                accumulated_blocks = []
+                chunk_has_voice = False
+                start_tracking_time = time.time()
+                if not preview_clear_at:
+                    idle_preview()
+
             try:
                 block = audio_queue.get(timeout=0.05)
                 accumulated_blocks.append(block)
@@ -364,7 +477,7 @@ def run_voice_loop(gui_ref=None, should_run=None):
             if preview_clear_at and now >= preview_clear_at:
                 preview_clear_at = 0.0
                 if not pending_text:
-                    push_preview("Voice: idle", "#6C6B80")
+                    idle_preview()
 
             # ---- Indicator + commit stage: hold the interpreted phrase until the speaker stops ----
             if pending_text:
@@ -382,7 +495,8 @@ def run_voice_loop(gui_ref=None, should_run=None):
                         if any(p.lower().strip() in clean_final.lower() for p in phrases):
                             matched_global = True
                             break
-                    add_subtitle_to_overlay(final_text, is_command=(is_writing_toggle or matched_global))
+                    is_lock_cmd = _is_exact_command(clean_final, lock_phrases)
+                    add_subtitle_to_overlay(final_text, is_command=(is_writing_toggle or matched_global or is_lock_cmd))
 
                     execute_voice_intent(final_text, config_payload, gui_ref)
 
@@ -398,7 +512,7 @@ def run_voice_loop(gui_ref=None, should_run=None):
                         text, color = _format_pending_preview(pending_text, pending_label, pending_kind, max(0.0, hold - silence_for))
                         push_preview(text, color)
 
-            elif chunk_has_voice and now - last_preview_push >= 0.5:
+            elif chunk_has_voice and not VOICE_LOCKED and now - last_preview_push >= 0.5:
                 last_preview_push = now
                 push_preview("\U0001F399 Listening...", "#ffb300")
 
@@ -487,6 +601,14 @@ def run_voice_loop(gui_ref=None, should_run=None):
                         text_output = ""
                     clean_text = text_output.strip().replace(".", "").replace(",", "").replace("!", "")
 
+                    if VOICE_LOCKED:
+                        # Locked: nothing is logged, shown or run, except the phrase that unlocks again.
+                        if clean_text and _contains_command(clean_text, unlock_phrases):
+                            set_voice_locked(False, gui_ref)
+                            push_preview("🔓 Voice unlocked", "#00e676")
+                            preview_clear_at = time.time() + 2.5
+                        continue
+
                     if len(clean_text) > 2 and clean_text.lower() not in ["uh", "oh", "um", "the"]:
                         if gui_ref:
                             gui_ref.log_message(f"[INPUT] User Said: \"{text_output}\"")
@@ -501,7 +623,7 @@ def run_voice_loop(gui_ref=None, should_run=None):
                         push_preview(text, color)
                         last_preview_push = time.time()
                     elif not pending_text:
-                        push_preview("Voice: idle", "#6C6B80")
+                        idle_preview()
 
     push_preview("Voice: idle", "#6C6B80")
 
@@ -511,6 +633,10 @@ def execute_voice_intent(phrase, config_payload, gui_ref=None):
 
     phrase_clean = phrase.strip().replace("!", "").replace(".", "")
     phrase_lower = phrase_clean.lower()
+
+    if _is_exact_command(phrase_lower, _lock_phrases(config_payload)):
+        set_voice_locked(True, gui_ref)
+        return
 
     if "activate writing mode" in phrase_lower or "start typing" in phrase_lower:
         if not system_state.WRITING_MODE_ACTIVE:
@@ -585,6 +711,10 @@ def execute_voice_intent(phrase, config_payload, gui_ref=None):
 
     # LEVEL 3: global commands (exact phrase)
     matched_action = find_global_action(phrase_lower, config_payload)
+
+    if matched_action in ("voice_lock", "voice_unlock"):
+        set_voice_locked(matched_action == "voice_lock", gui_ref)
+        return
 
     if matched_action:
         dispatcher.dispatch_system_action(action_name=matched_action, raw_phrase=phrase_lower, gui_ref=gui_ref)
