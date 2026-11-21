@@ -310,7 +310,9 @@ class SettingsWindow(ctk.CTkToplevel):
         self.available_gesture_actions = [
             "media_play_pause", "volume_up", "volume_down", 
             "previous_track", "next_track", "trigger_screenshot", 
-            "wake_gate", "two_finger_scroll", "system_idle"
+            "wake_gate", "two_finger_scroll", "system_idle",
+            "maximize", "minimize", "zoom_in", "zoom_out",
+            "voice_lock", "voice_unlock"
         ]
         
         self.selected_finger = "thumb" 
@@ -338,7 +340,19 @@ class SettingsWindow(ctk.CTkToplevel):
         title_label = ctk.CTkLabel(self, text="Advanced Multimodal Command Configurations", font=ctk.CTkFont(size=15, weight="bold"))
         title_label.pack(pady=(12, 2))
 
-        self.tab_view = ctk.CTkTabview(self, width=860, height=600)
+        # The bottom bar is packed BEFORE the tab view. Tk's pack gives space in packing order, so when the
+        # tab view was packed first it could take the whole window and push Save All Changes off-screen.
+        self.changes_tracker_lbl = ctk.CTkLabel(self, text="ℹ️ Changes apply after Save All Changes (restart the engine to reload gestures).", font=ctk.CTkFont(size=11, slant="italic"), text_color="#A2A1B6")
+        self.changes_tracker_lbl.pack(fill="x", side="bottom", pady=(0, 5))
+
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.pack(fill="x", pady=10, padx=20, side="bottom")
+        save_btn = ctk.CTkButton(btn_frame, text="Save All Changes", fg_color="#2baf54", hover_color="#228b42", command=self.save_all_settings)
+        save_btn.pack(side="right", padx=5)
+        cancel_btn = ctk.CTkButton(btn_frame, text="Cancel", fg_color="#7f8c8d", hover_color="#95a5a6", command=self.destroy)
+        cancel_btn.pack(side="left", padx=5)
+
+        self.tab_view = ctk.CTkTabview(self, width=860, height=520)
         self.tab_view.pack(padx=15, pady=5, fill="both", expand=True)
 
         self.tab_view.add("Dynamic Launchers")
@@ -388,6 +402,8 @@ class SettingsWindow(ctk.CTkToplevel):
 
         g_bar = ctk.CTkFrame(gesture_tab, fg_color="transparent")
         g_bar.pack(fill="x", padx=10, pady=(6, 0))
+        ctk.CTkButton(g_bar, text="💾 Save Gestures", width=130, fg_color="#2baf54", hover_color="#228b42",
+                      command=self.persist_gestures_to_disk).pack(side="right")
         ctk.CTkLabel(g_bar, text="Saved gestures -> command (add new ones with the camera above, 👁 shows a gesture):", font=ctk.CTkFont(size=11, slant="italic")).pack(side="left")
 
         self.gesture_scroll = ctk.CTkScrollableFrame(gesture_tab, height=170)
@@ -461,16 +477,6 @@ class SettingsWindow(ctk.CTkToplevel):
             self.profile_field_entries[field_key] = p_entry
 
         self.load_settings_payload_from_disk(voice_path)
-
-        self.changes_tracker_lbl = ctk.CTkLabel(self, text="ℹ️ Changes apply after Save All Changes (restart the engine to reload gestures).", font=ctk.CTkFont(size=11, slant="italic"), text_color="#A2A1B6")
-        self.changes_tracker_lbl.pack(fill="x", side="bottom", pady=(0, 5))
-
-        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
-        btn_frame.pack(fill="x", pady=10, padx=20, side="bottom")
-        save_btn = ctk.CTkButton(btn_frame, text="Save All Changes", fg_color="#2baf54", hover_color="#228b42", command=self.save_all_settings)
-        save_btn.pack(side="right", padx=5)
-        cancel_btn = ctk.CTkButton(btn_frame, text="Cancel", fg_color="#7f8c8d", hover_color="#95a5a6", command=self.destroy)
-        cancel_btn.pack(side="left", padx=5)
 
     def toggle_calibration_camera_thread(self):
         """Starts/stops the calibration camera. The worker thread only grabs + analyses frames; the UI thread renders them."""
@@ -725,7 +731,7 @@ class SettingsWindow(ctk.CTkToplevel):
             key = "pinch_zoom_in"
         elif thumb_open and idx and three_closed and gap_index >= 0.25:
             key = "l_zoom_out"
-        elif gap_index < 0.28 and gap_middle < 0.28 and idx and mid and two_closed:
+        elif gap_index < 0.28 and gap_middle < 0.28 and idx and mid and two_closed and d(8, 12) / scale <= 0.35:
             key = "three_finger_pinch"
         elif all_closed and thumb_gap <= 0.28:
             key = "fist"
@@ -1297,12 +1303,14 @@ class SettingsWindow(ctk.CTkToplevel):
         )
         url_submit_btn.pack(side="right")
 
+    VOICE_PRESET_ACTIONS = ("voice_lock", "voice_unlock")
+
     def render_voice_row(self, action_key, phrases):
         """Renders one editable voice command row: action name + comma separated phrases + delete."""
         row = ctk.CTkFrame(self.voice_scroll, fg_color="#181824")
         row.pack(fill="x", padx=5, pady=4)
 
-        action_values = list(dict.fromkeys(self.known_voice_actions))
+        action_values = list(dict.fromkeys(list(self.known_voice_actions) + list(self.VOICE_PRESET_ACTIONS)))
         e_action = ctk.CTkComboBox(row, values=action_values, width=190)
         e_action.set(action_key)
         e_action.pack(side="left", padx=5, pady=5)
@@ -1523,12 +1531,17 @@ class SettingsWindow(ctk.CTkToplevel):
         e_name.pack(pady=(10, 5))
 
         drop_action = ctk.CTkComboBox(prompt_modal, values=self.get_action_choices(), width=340)
+        # CTkComboBox pre-selects its first value (media_play_pause). Left like that, a new gesture silently got
+        # an existing command and looked like it had "mixed up" with another gesture. Start empty instead.
+        drop_action.set("")
         drop_action.pack(pady=5)
         ctk.CTkButton(prompt_modal, text="⚙ Custom action (app / URL / hotkey)", width=340, fg_color="#2c2c3e", hover_color="#3e3e56",
                       command=lambda: self.open_custom_action_dialog(drop_action, parent=prompt_modal)).pack(pady=5)
 
         err_lbl = ctk.CTkLabel(prompt_modal, text="", text_color="#ff1744", font=ctk.CTkFont(size=11))
         err_lbl.pack()
+
+        confirm_state = {"action": None}
 
         def commit_snapshot_profile_to_disk():
             g_name = e_name.get().strip().lower().replace(" ", "_")
@@ -1542,12 +1555,23 @@ class SettingsWindow(ctk.CTkToplevel):
                 err_lbl.configure(text=f"The name '{g_name}' is already used. Pick another one.")
                 return
 
+            # Warn (once) if another gesture already triggers this command.
+            owners = [r["name_widget"].get().strip() for r in self.gesture_ui_rows
+                      if r["action_widget"].get().strip() == chosen_action]
+            if owners and confirm_state["action"] != chosen_action:
+                confirm_state["action"] = chosen_action
+                err_lbl.configure(text=f"'{chosen_action}' is already used by '{owners[0]}'.\nPress Link again to use it for both, or pick another command.")
+                return
+
             landmarks = [[round(pt.x, 5), round(pt.y, 5), round(pt.z, 5)] for pt in snapshot]
-            self.render_gesture_row({"name": g_name, "action": chosen_action, "landmarks": landmarks})
-            self.vision_telemetry_lbl.configure(
-                text=f"Tendon Frame State: PROFILE REGISTERED\nName: {g_name} -> Action: {chosen_action}",
-                text_color="#00e676"
-            )
+            new_row = self.render_gesture_row({"name": g_name, "action": chosen_action, "landmarks": landmarks})
+            if self.persist_gestures_to_disk():
+                self.vision_telemetry_lbl.configure(
+                    text=f"✅ SAVED: {g_name} -> {chosen_action}\nRestart the engine (STOP, then START) to use it.",
+                    text_color="#00e676"
+                )
+            else:
+                self.drop_gesture_row(new_row["frame"], new_row)   # not saved -> don't leave a phantom row behind
             prompt_modal.destroy()
 
         btns = ctk.CTkFrame(prompt_modal, fg_color="transparent")
@@ -1599,10 +1623,11 @@ class SettingsWindow(ctk.CTkToplevel):
             row["action_widget"].configure(values=choices)
             row["action_widget"].set(value)
 
-            self.vision_telemetry_lbl.configure(
-                text=f"Command updated: {name} -> {value}\nPress Save All Changes to apply.",
-                text_color="#00e676"
-            )
+            if self.persist_gestures_to_disk():
+                self.vision_telemetry_lbl.configure(
+                    text=f"✅ SAVED: {name} -> {value}\nRestart the engine (STOP, then START) to use it.",
+                    text_color="#00e676"
+                )
             # Briefly highlight the updated row in the gesture list.
             try:
                 row["frame"].configure(fg_color="#3a3a6e")
@@ -1670,6 +1695,47 @@ class SettingsWindow(ctk.CTkToplevel):
         self._safely_kill_video_hardware()
         super().destroy()
 
+    def _collect_gestures_from_rows(self):
+        """Builds the gesture list from the rows on screen (one entry per unique name)."""
+        gestures, seen = [], set()
+        for row in self.gesture_ui_rows:
+            g_name = row["name_widget"].get().strip().lower().replace(" ", "_")
+            action_value = row["action_widget"].get().strip()
+            if not g_name or not action_value or g_name in seen:
+                continue
+            seen.add(g_name)
+            entry = dict(row.get("extra", {}))
+            entry["name"] = g_name
+            entry["action"] = action_value
+            gestures.append(entry)
+        return gestures
+
+    def persist_gestures_to_disk(self):
+        """Writes the gesture list to config/gestures.json right now (atomic). Returns True on success."""
+        gesture_path = os.path.join(BASE_DIR, 'config', 'gestures.json')
+        try:
+            payload = {}
+            if os.path.exists(gesture_path):
+                with open(gesture_path, 'r') as f:
+                    payload = json.load(f)      # unreadable file -> abort instead of overwriting it with a stub
+            payload["gestures"] = self._collect_gestures_from_rows()
+            payload.setdefault("pose_match_threshold", 0.25)
+
+            tmp_path = gesture_path + ".tmp"
+            with open(tmp_path, 'w') as f:
+                json.dump(payload, f, indent=4)
+            os.replace(tmp_path, gesture_path)   # a crash mid-write can no longer leave a half-written file
+        except Exception as e:
+            print(f"[GESTURE SAVE ERROR] {e}")
+            self.vision_telemetry_lbl.configure(text=f"❌ Could not save gestures: {e}", text_color="#ff1744")
+            return False
+
+        try:
+            self.parent_dashboard.load_and_display_json()
+        except Exception:
+            pass
+        return True
+
     def save_all_settings(self):
         """Serializes current voice configurations, camera color choices, and custom snapshot gestures back to disk."""
         gesture_path = os.path.join(BASE_DIR, 'config', 'gestures.json')
@@ -1694,18 +1760,7 @@ class SettingsWindow(ctk.CTkToplevel):
                     inner_cfg["launch_phrases"] = [item.strip().lower() for item in txt.split(",") if item.strip()]
                     new_registry[p] = inner_cfg
 
-        updated_gestures = []
-        seen_names = set()
-        for row in self.gesture_ui_rows:
-            g_name = row["name_widget"].get().strip().lower().replace(" ", "_")
-            action_value = row["action_widget"].get().strip()
-            if not g_name or not action_value or g_name in seen_names:
-                continue
-            seen_names.add(g_name)
-            entry = dict(row.get("extra", {}))
-            entry["name"] = g_name
-            entry["action"] = action_value
-            updated_gestures.append(entry)
+        updated_gestures = self._collect_gestures_from_rows()
 
         safe_cooldown_value = 0.50
 
@@ -1962,6 +2017,16 @@ class HCIDashboard(ctk.CTk):
                                               justify="left", anchor="w", wraplength=330, text_color="#6C6B80")
         self.voice_preview_lbl.pack(anchor="w", fill="x", padx=25, pady=(8, 4))
 
+        voice_btn_row = ctk.CTkFrame(guide_card, fg_color="transparent")
+        voice_btn_row.pack(fill="x", padx=25, pady=(4, 8))
+        self.voice_lock_btn = ctk.CTkButton(voice_btn_row, text="🔒 Voice Lock", height=30, width=150, state="disabled",
+                                            command=self.lock_voice)
+        self.voice_lock_btn.pack(side="left", padx=(0, 6))
+        self.voice_unlock_btn = ctk.CTkButton(voice_btn_row, text="🔓 Voice Unlock", height=30, width=150, state="disabled",
+                                              command=self.unlock_voice)
+        self.voice_unlock_btn.pack(side="left")
+        self.refresh_voice_lock_ui()      # initial look: both buttons greyed out until the engine starts
+
         log_card = ctk.CTkFrame(bottom_split, corner_radius=20, fg_color=self.log_container)
         log_card.pack(side="right", fill="both", expand=True)
 
@@ -2084,6 +2149,38 @@ class HCIDashboard(ctk.CTk):
         self.hand_canvas.create_text(225, 38, text="RING", fill="#6C6B80", font=("Consolas", 9, "bold"))
         self.hand_canvas.create_text(285, 68, text="PINKY", fill="#6C6B80", font=("Consolas", 9, "bold"))
 
+    def lock_voice(self):
+        """Voice Lock button: the voice engine stops running commands (same as saying "lock voice")."""
+        if self.engine_active:
+            voice_module.set_voice_locked(True, self)
+
+    def unlock_voice(self):
+        """Voice Unlock button: voice commands work again (same as saying "unlock voice")."""
+        if self.engine_active:
+            voice_module.set_voice_locked(False, self)
+
+    def refresh_voice_lock_ui(self):
+        """Updates both voice buttons and the audio indicator. Called through run_on_ui from any thread.
+        Lock is available while voice is listening, Unlock while it is locked; both are off with the engine stopped."""
+        locked = voice_module.VOICE_LOCKED
+        active = self.engine_active
+        try:
+            lock_on = active and not locked
+            unlock_on = active and locked
+            self.voice_lock_btn.configure(state="normal" if lock_on else "disabled",
+                                          fg_color="#ffab00" if lock_on else "#1b1b28",
+                                          hover_color="#ffc247", text_color="#0A0A0F" if lock_on else "#6C6B80")
+            self.voice_unlock_btn.configure(state="normal" if unlock_on else "disabled",
+                                            fg_color="#2baf54" if unlock_on else "#1b1b28",
+                                            hover_color="#228b42", text_color="#ffffff" if unlock_on else "#6C6B80")
+            if active:
+                if locked:
+                    self.mic_indicator.configure(text="Audio: Locked 🔒", text_color="#ffab00")
+                else:
+                    self.mic_indicator.configure(text="Audio: Active 🟢", text_color=self.btn_green)
+        except Exception:
+            pass
+
     def open_settings(self):
         SettingsWindow(self)
 
@@ -2126,6 +2223,8 @@ class HCIDashboard(ctk.CTk):
                 database_manager.start_session()
             except Exception as e:
                 print(f"[SYSTEM] Could not register session start: {e}")
+
+            self.refresh_voice_lock_ui()
 
             self._run_id += 1
             run_id = self._run_id
@@ -2170,6 +2269,8 @@ class HCIDashboard(ctk.CTk):
 
             vision_module.TRACKER_LOOP_ACTIVE = False
             voice_module.VOICE_LOOP_ACTIVE = False
+            voice_module.set_voice_locked(False, self)      # a new START always begins unlocked
+            self.refresh_voice_lock_ui()
 
             if self.preview_window and self.preview_window.winfo_exists():
                 self.preview_window.destroy()
