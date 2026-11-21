@@ -1,0 +1,333 @@
+{
+    "voice_commands": {
+        "launch_chrome": [
+            "open chrome",
+            "start chrome",
+            "launch chrome",
+            "open google chrome"
+        ],
+        "launch_youtube": [
+            "open youtube",
+            "start youtube",
+            "launch youtube",
+            "go to youtube"
+        ],
+        "trigger_voice_search": [
+            "search by voice",
+            "open search by voice",
+            "search on google",
+            "google search",
+            "search the web",
+            "microphone search",
+            "microphone"
+        ],
+        "launch_notepad": [
+            "start notepad",
+            "notepad",
+            "note"
+        ],
+        "start_microsoft_word": [
+            "start word",
+            "word"
+        ],
+        "enter": [
+            "enter"
+        ],
+        "jump_timestamp": [
+            "go to",
+            "jump to",
+            "skip to"
+        ],
+        "exit": [
+            "exit",
+            "quit",
+            "kill"
+        ],
+        "mouse_click_left": [
+            "click",
+            "left click",
+            "select item",
+            "press here"
+        ],
+        "mouse_click_right": [
+            "right click",
+            "context menu",
+            "options menu"
+        ],
+        "mouse_double_click": [
+            "double click",
+            "open item",
+            "run item"
+        ],
+        "scroll_view_down": [
+            "scroll down",
+            "page down",
+            "move down"
+        ],
+        "scroll_view_up": [
+            "scroll up",
+            "page up",
+            "move up"
+        ],
+        "toggle_screen_magnifier": [
+            "zoom screen",
+            "turn on magnifier",
+            "magnify glass",
+            "open magnifier"
+        ],
+        "trigger_tts_reader": [
+            "read text",
+            "read selection",
+            "speak text",
+            "voice screen"
+        ],
+        "stop_tts_reader": [
+            "stop reading",
+            "shut up",
+            "quiet reader"
+        ],
+        "toggle_high_contrast_theme": [
+            "toggle high contrast",
+            "high contrast mode",
+            "accessibility colors"
+        ],
+        "minimize_all_windows": [
+            "show desktop",
+            "clear screen",
+            "hide everything"
+        ],
+        "cycle_active_applications": [
+            "switch application",
+            "next window",
+            "change app"
+        ],
+        "snap_window_left_side": [
+            "snap left",
+            "split left",
+            "window left"
+        ],
+        "snap_window_right_side": [
+            "snap right",
+            "split right",
+            "window right"
+        ],
+        "next_tab": [
+            "next tab"
+        ],
+        "prev_tab": [
+            "previous tab",
+            "back tab"
+        ],
+        "launch_paint": [
+            "open paint",
+            "start paint",
+            "launch paint",
+            "microsoft paint"
+        ],
+        "launch_calculator": [
+            "open calculator",
+            "start calculator",
+            "launch calculator",
+            "open math"
+        ],
+        "launch_file_explorer": [
+            "open files",
+            "start file explorer",
+            "open folders",
+            "my files"
+        ],
+        "launch_browser_google": [
+            "open google",
+            "go to google",
+            "search page"
+        ],
+        "form_next_field": [
+            "next box",
+            "next field",
+            "skip box",
+            "move forward"
+        ],
+        "form_prev_field": [
+            "previous box",
+            "previous field",
+            "go back box",
+            "move backward"
+        ],
+        "form_select_all": [
+            "select all",
+            "grab all"
+        ],
+        "form_clear_field": [
+            "clear box",
+            "erase text",
+            "delete all"
+        ],
+        "form_submit": [
+            "submit form",
+            "send form",
+            "press finish"
+        ],
+        "edit_undo": [
+            "undo",
+            "go back step",
+            "fix mistake"
+        ],
+        "edit_redo": [
+            "redo",
+            "restore step",
+            "repeat text"
+        ],
+        "edit_copy": [
+            "copy text",
+            "grab text",
+            "copy selection"
+        ],
+        "edit_paste": [
+            "paste text",
+            "drop text",
+            "paste here"
+        ],
+        "edit_delete_line": [
+            "delete line",
+            "clear row",
+            "wipe row"
+        ],
+        "autofill_first_name": [
+            "fill first name",
+            "autofill first name",
+            "type my first name",
+            "first name"
+        ],
+        "autofill_middle_name": [
+            "fill middle name",
+            "autofill middle name",
+            "type my middle name",
+            "middle name"
+        ],
+        "autofill_last_name": [
+            "fill last name",
+            "autofill last name",
+            "type my last name",
+            "last name"
+        ],
+        "autofill_email": [
+            "fill email",
+            "autofill email",
+            "type my email",
+            "email address"
+        ],
+        "autofill_phone_number": [
+            "fill phone number",
+            "autofill phone",
+            "type my phone number",
+            "phone number"
+        ],
+        "autofill_address": [
+            "fill address",
+            "autofill address",
+            "type my address",
+            "home address"
+        ],
+        "launch_gemini": [
+            "open gemini",
+            "start gemini",
+            "launch gemini",
+            "go to gemini"
+        ],
+        "new_tab": [
+            "new tab",
+            "open new tab",
+            "create new tab"
+        ],
+        "launch_google_slides": [
+            "open google slides",
+            "start google slides",
+            "launch google slides",
+            "go to google slides"
+        ],
+        "launch_google_docs": [
+            "open google docs",
+            "start google docs",
+            "launch google docs",
+            "go to google docs"
+        ],
+        "launch_google_drive": [
+            "open google drive",
+            "start google drive",
+            "launch google drive",
+            "go to google drive"
+        ],
+        "launch_microsoft_excel": [
+            "open excel",
+            "start excel",
+            "launch excel",
+            "go to excel",
+            "excel"
+        ],
+        "launch_microsoft_powerpoint": [
+            "open powerpoint",
+            "start powerpoint",
+            "launch powerpoint",
+            "powerpoint",
+            "ppt"
+        ],
+        "launch_microsoft_outlook": [
+            "open outlook",
+            "start outlook",
+            "launch outlook",
+            "go to outlook",
+            "outlook"
+        ],
+        "launch_calendar": [
+            "open calendar",
+            "start calendar",
+            "launch calendar",
+            "go to calendar",
+            "calendar"
+        ],
+        "launch_microsoft_teams": [
+            "open teams",
+            "start teams",
+            "launch teams",
+            "go to teams",
+            "teams"
+        ],
+        "launch_microsoft_edge": [
+            "open edge",
+            "start edge",
+            "launch edge",
+            "go to edge",
+            "microsoft edge"
+        ],
+        "launch_microsoft_onenote": [
+            "open onenote",
+            "start onenote",
+            "launch onenote",
+            "go to onenote",
+            "onenote"
+        ],
+        "launch_microsoft_photos": [
+            "open photos",
+            "start photos",
+            "launch photos",
+            "go to photos",
+            "microsoft photos"
+        ],
+        "launch_microsoft_camera": [
+            "open camera",
+            "start camera",
+            "launch camera",
+            "go to camera",
+            "microsoft camera"
+        ],
+        "launch_microsoft_paint": [
+            "open paint",
+            "start paint",
+            "launch paint",
+            "go to paint",
+            "microsoft paint"
+        ]
+    },
+    "dynamic_apps_registry": {},
+    "commit_delay": 1.2
+}

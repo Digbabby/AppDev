@@ -1,0 +1,2 @@
+Also since my hand would naturally fall donw after volume up (swipe up), it's also trigger swipe down (volume down). We need a block for it
+Tracker is inconsistent with light

@@ -1,0 +1,69 @@
+{
+    "gestures": [
+        {
+            "name": "fist",
+            "action": "media_play_pause"
+        },
+        {
+            "name": "index_point",
+            "action": "cursor_move"
+        },
+        {
+            "name": "victory_sign",
+            "action": "trigger_screenshot"
+        },
+        {
+            "name": "open_hand",
+            "action": "system_idle"
+        },
+        {
+            "name": "swipe_up",
+            "action": "volume_up"
+        },
+        {
+            "name": "swipe_down",
+            "action": "volume_down"
+        },
+        {
+            "name": "swipe_left",
+            "action": "previous_track"
+        },
+        {
+            "name": "swipe_right",
+            "action": "next_track"
+        },
+        {
+            "name": "thumbs_up",
+            "action": "maximize"
+        },
+        {
+            "name": "thumbs_down",
+            "action": "minimize"
+        },
+        {
+            "name": "pinch_zoom_in",
+            "action": "zoom_in"
+        },
+        {
+            "name": "l_zoom_out",
+            "action": "zoom_out"
+        }
+    ],
+    "colors": {
+        "thumb": "#D5FF8C",
+        "index": "#FF52D0",
+        "middle": "#95FFBF",
+        "ring": "#79ADFF",
+        "pinky": "#8DF9FF"
+    },
+    "safety_cooldown_controls": {
+        "global_gesture_delay": 2.2,
+        "swipe_action_delay": 0.5,
+        "custom_action_delay": 3.0
+    },
+    "user_2d_grid_matrix": {
+        "grid_density": 3,
+        "zone_bindings": {}
+    },
+    "pose_match_threshold": 0.25
+}

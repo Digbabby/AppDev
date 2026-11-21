@@ -1,0 +1,91 @@
+{
+    "tasks": [
+        {
+            "id": "vol_up",
+            "label": "Raise the volume",
+            "match": [
+                "volume_up"
+            ],
+            "target": 2,
+            "count": 0
+        },
+        {
+            "id": "vol_down",
+            "label": "Lower the volume",
+            "match": [
+                "volume_down"
+            ],
+            "target": 2,
+            "count": 0
+        },
+        {
+            "id": "play_pause",
+            "label": "Play / pause media",
+            "match": [
+                "media_play_pause"
+            ],
+            "target": 1,
+            "count": 0
+        },
+        {
+            "id": "skip_track",
+            "label": "Skip a track (next or previous)",
+            "match": [
+                "next_track",
+                "previous_track"
+            ],
+            "target": 2,
+            "count": 0
+        },
+        {
+            "id": "screenshot",
+            "label": "Take a screenshot",
+            "match": [
+                "trigger_screenshot"
+            ],
+            "target": 1,
+            "count": 0
+        },
+        {
+            "id": "voice_launch",
+            "label": "Open an app or site by voice",
+            "match": [
+                "launch_custom_url",
+                "launch_custom_executable"
+            ],
+            "via": "voice",
+            "target": 1,
+            "count": 0
+        },
+        {
+            "id": "voice_hotkey",
+            "label": "Fire a window shortcut by voice",
+            "match": [
+                "hotkey_*"
+            ],
+            "via": "voice",
+            "target": 1,
+            "count": 0
+        },
+        {
+            "id": "gesture_custom",
+            "label": "Run a custom gesture action",
+            "match": [
+                "launch:*",
+                "hotkey:*"
+            ],
+            "via": "gesture",
+            "target": 1,
+            "count": 0
+        },
+        {
+            "id": "new_pose",
+            "label": "Capture and register a new pose",
+            "match": [
+                "custom_pose_saved"
+            ],
+            "target": 1,
+            "count": 0
+        }
+    ]
+}

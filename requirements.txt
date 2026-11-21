@@ -1,0 +1,12 @@
+opencv-python
+mediapipe
+openai-whisper
+numpy
+customtkinter
+sounddevice
+pyautogui
+keyboard
+pyperclip
+pyinstaller
+icoextract 
+pillow
