@@ -64,6 +64,14 @@ ENGINE_ACTIVE = True
 WAKE_HOLD_START = None
 WAKE_HOLD_DURATION = 0.4
 WAKE_NEEDS_RELEASE = False   # after a lock/unlock toggle the index point must be released before the next one
+# The 3-finger pinch (toggle writing mode) used to fire on a SINGLE frame. While the hand moved into or out of a
+# victory sign, one stray frame was enough to flip writing mode. It now has to be held, like the wake gesture.
+PINCH_HOLD_START = None
+PINCH_HOLD_DURATION = 0.5    # seconds the pinch must be held before it toggles
+PINCH_NEEDS_RELEASE = False  # after a toggle the pinch must be released before the next one
+# A real 3-finger pinch has index and middle tips touching the thumb, so they are close to EACH OTHER. A victory
+# sign has them spread (> 0.40). Requiring this makes the two poses impossible to confuse.
+PINCH_MAX_TIP_GAP = 0.35
 active_intent = None
 last_swipe_timestamp = 0
 INTENT_RESET_DELAY = 0.5
@@ -74,6 +82,8 @@ TRACKER_LOOP_ACTIVE = False
 IMMEDIATE_ACTIONS = {"volume_up", "volume_down", "previous_track", "next_track", "media_play_pause"}
 # Gestures with built-in behaviour that is not "run the mapped action".
 SPECIAL_GESTURES = {"index_point", "two_finger_scroll", "three_finger_pinch"}
+# Presets that only flip the voice lock (handled in run_custom_action, they never reach the dispatcher).
+VOICE_LOCK_ACTIONS = {"voice_lock", "voice_unlock"}
 # Mapped actions that repeat while the pose is held (one step per hold streak), as before.
 REPEATING_ACTIONS = {"maximize", "minimize", "zoom_in", "zoom_out"}
 
@@ -84,15 +94,24 @@ def toggle_engine():
 
 keyboard.add_hotkey('ctrl+shift+s', toggle_engine)
 
+def _with_gesture_aliases(mapping):
+    """The engine names the thumb poses thumb_up / thumb_down, but the built-in fallback table (and older config
+    files) say thumbs_up / thumbs_down, so maximize / minimize silently never fired. Accept both spellings."""
+    for alias, key in (("thumbs_up", "thumb_up"), ("thumbs_down", "thumb_down")):
+        if alias in mapping and key not in mapping:
+            mapping[key] = mapping[alias]
+    return mapping
+
+
 def load_gesture_mappings():
     config_path = os.path.join(BASE_DIR, 'config', 'gestures.json')
     try:
         with open(config_path, 'r') as f:
             data = json.load(f)
-            return {g['name']: g['action'] for g in data['gestures']}
+            return _with_gesture_aliases({g['name']: g['action'] for g in data['gestures']})
     except Exception as e:
         print(f"Config error: {e}. Falling back to default mappings.")
-        return {
+        return _with_gesture_aliases({
             "fist": "media_play_pause",
             "index_point": "wake_gate", 
             "victory_sign": "trigger_screenshot",
@@ -104,7 +123,7 @@ def load_gesture_mappings():
             "thumbs_down": "minimize",
             "pinch_zoom_in": "zoom_in",
             "l_zoom_out": "zoom_out"
-        }
+        })
 
 def hex_to_bgr(hex_str):
     """Converts a #RRGGBB string to an OpenCV friendly (B, G, R) tuple."""
@@ -206,7 +225,24 @@ def run_custom_action(action, current_time, cooldowns, delay):
     cooldowns[cooldown_key] = current_time + delay
     if action.startswith(("launch:", "hotkey:")) and not action.partition(":")[2].strip():
         return      # empty custom action
-    get_dispatcher().dispatch_system_action(action_name=action)
+
+    if action in VOICE_LOCK_ACTIONS:
+        try:
+            import voice_module
+            voice_module.set_voice_locked(action == "voice_lock")
+        except Exception as e:
+            print(f"[VISION] Could not change the voice lock: {type(e).__name__}: {e}")
+        return
+
+    print(f"[VISION] Gesture action -> {action}")
+    # A failing action (missing module, bad path, ...) used to raise out of the tracking loop and stop the whole
+    # tracker. It is now reported and the camera keeps running.
+    try:
+        get_dispatcher().dispatch_system_action(action_name=action)
+    except Exception as e:
+        import traceback
+        print(f"[VISION] Action '{action}' failed: {type(e).__name__}: {e}")
+        traceback.print_exc()
 
 
 _active_keeper = None   # the webcam currently held by the tracker (so it can always be released)
@@ -226,6 +262,7 @@ def run_hand_tracker(frame_queue=None, should_run=None):
 
 def _run_hand_tracker(frame_queue, should_run):
     global WAKE_HOLD_START, WAKE_NEEDS_RELEASE, active_intent, last_swipe_timestamp
+    global PINCH_HOLD_START, PINCH_NEEDS_RELEASE
     global TRACKER_LOOP_ACTIVE, _active_keeper
 
     TRACKER_LOOP_ACTIVE = True
@@ -496,7 +533,8 @@ def _run_hand_tracker(frame_queue, should_run):
 
             is_l_posture = is_thumb_open and is_index_open and three_fingers_closed and (gap_index >= 0.25)
 
-            is_three_finger_pinch = (gap_index < 0.28) and (gap_middle < 0.28) and is_index_open and is_middle_open and two_fingers_closed
+            is_three_finger_pinch = ((gap_index < 0.28) and (gap_middle < 0.28) and is_index_open and is_middle_open
+                                     and two_fingers_closed and (index_middle_gap <= PINCH_MAX_TIP_GAP))
 
             hand_x = hand_points[0].x
             hand_y = hand_points[0].y
@@ -579,7 +617,7 @@ def _run_hand_tracker(frame_queue, should_run):
 
                 if normalized_gap > 0.40:  
                     gesture_key = "victory_sign"
-                    gesture_text = "VICTORY: TOGGLE WRITING"
+                    gesture_text = "VICTORY SIGN"
                     color = (255, 0, 255)
                 else:
                     gesture_key = "two_finger_scroll"
@@ -719,14 +757,24 @@ def _run_hand_tracker(frame_queue, should_run):
             WAKE_NEEDS_RELEASE = False
 
         if gesture_key == "three_finger_pinch":
-            if current_time > cooldowns["mode_toggle"]:
+            if PINCH_NEEDS_RELEASE:
+                pass    # just toggled: release the pinch before a new hold can count
+            elif PINCH_HOLD_START is None:
+                PINCH_HOLD_START = current_time
+            elif (current_time - PINCH_HOLD_START >= PINCH_HOLD_DURATION
+                  and current_time > cooldowns["mode_toggle"]):
                 system_state.WRITING_MODE_ACTIVE = not system_state.WRITING_MODE_ACTIVE
                 system_state.HUD_REFRESH_REQUIRED = True
 
                 mode_text = "WRITING MODE" if system_state.WRITING_MODE_ACTIVE else "COMMAND MODE"
-                print(f"[GESTURE INTERACT] Three-Finger Pinch Detected! Swapping context to: {mode_text}")
+                print(f"[GESTURE INTERACT] Three-Finger Pinch held! Swapping context to: {mode_text}")
 
                 cooldowns["mode_toggle"] = current_time + COOLDOWN_DEFAULT
+                PINCH_HOLD_START = None
+                PINCH_NEEDS_RELEASE = True
+        else:
+            PINCH_HOLD_START = None
+            PINCH_NEEDS_RELEASE = False
 
         if system_state.SYSTEM_UNLOCKED:
             if gesture_key != "index_point" and not gesture_text.startswith("SWIPE"):
